@@ -6,23 +6,23 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.dynamicframe import DynamicFrame
 
-#job args
+# job args
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 
-#contexts
+# contexts
 sc = SparkContext()
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args["JOB_NAME"], args)
 
-#constants
+# constants
 database_name = "stedi"
 bucket_name = "stedi-lakehouse-hoffman"
 target_path = f"s3://{bucket_name}/machine_learning_curated/"
 target_table = "machine_learning_curated"
 
-#read trusted sources from data catalog
+# read trusted sources from data catalog
 step_trainer_trusted_dyf = glueContext.create_dynamic_frame.from_catalog(
     database=database_name,
     table_name="step_trainer_trusted",
@@ -35,18 +35,18 @@ accelerometer_trusted_dyf = glueContext.create_dynamic_frame.from_catalog(
     transformation_ctx="accelerometer_trusted_dyf"
 )
 
-#temp views
+# temp views
 step_trainer_trusted_df = step_trainer_trusted_dyf.toDF()
 accelerometer_trusted_df = accelerometer_trusted_dyf.toDF()
 
 step_trainer_trusted_df.createOrReplaceTempView("step_trainer_trusted")
 accelerometer_trusted_df.createOrReplaceTempView("accelerometer_trusted")
 
-#join by step trainer sensor reading time and accelerometer timestamp
+# join by step trainer sensor reading time and accelerometer timestamp
 machine_learning_curated_df = spark.sql("""
     select
         st.sensorReadingTime,
-        st.serialNumber,
+        st.serialnumber,
         st.distanceFromObject,
         a.user,
         a.timestamp,
@@ -58,14 +58,20 @@ machine_learning_curated_df = spark.sql("""
       on st.sensorReadingTime = a.timestamp
 """)
 
-#convert back to dynamic frame
+# purge target path before writing so reruns do not duplicate data
+glueContext.purge_s3_path(
+    target_path,
+    options={"retentionPeriod": 0}
+)
+
+# convert back to dynamic frame
 machine_learning_curated_dyf = DynamicFrame.fromDF(
     machine_learning_curated_df,
     glueContext,
     "machine_learning_curated_dyf"
 )
 
-#write parquet and update glue catalog
+# write parquet and update glue catalog
 machine_learning_curated_sink = glueContext.getSink(
     path=target_path,
     connection_type="s3",

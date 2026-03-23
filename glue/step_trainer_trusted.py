@@ -12,12 +12,17 @@ job.init("step_trainer_trusted", {})
 
 database_name = "stedi"
 target_table = "step_trainer_trusted"
+source_path = "s3://stedi-lakehouse-hoffman/step_trainer_landing/"
 target_path = "s3://stedi-lakehouse-hoffman/step_trainer_trusted/"
 
-# read landing step trainer data from glue catalog
-step_trainer_df = glueContext.create_dynamic_frame.from_catalog(
-    database=database_name,
-    table_name="step_trainer_landing"
+# read landing step trainer data directly from s3
+step_trainer_df = glueContext.create_dynamic_frame.from_options(
+    connection_type="s3",
+    connection_options={
+        "paths": [source_path],
+        "recurse": True
+    },
+    format="json"
 ).toDF()
 
 # read curated customers from glue catalog
